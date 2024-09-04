@@ -3,16 +3,16 @@ from peft import LoraConfig
 from transformers import AutoProcessor, BitsAndBytesConfig, Idefics2ForConditionalGeneration
 
 DEVICE="cuda:0"
-CHECKPOINT = 5400
+CHECKPOINT=3400
 
 processor = AutoProcessor.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
-    do_image_splitting=False
+    do_image_splitting=True
 )
 
 
 model = Idefics2ForConditionalGeneration.from_pretrained(
-        f"./model-text2/checkpoint-{CHECKPOINT}",  # 5300 was the original cp
+        f"./model_visual_splitting/checkpoint-{CHECKPOINT}",
         torch_dtype=torch.bfloat16,
         #_attn_implementation="flash_attention_2", # Only available on A100 or H100
 ).to(DEVICE)
@@ -31,10 +31,55 @@ We first define the data collator which takes list of samples and return input t
 
 """
 
+import random
+
+class MyDataCollator:
+    def __init__(self, processor):
+        self.processor = processor
+        self.image_token_id = processor.tokenizer.additional_special_tokens_ids[
+            processor.tokenizer.additional_special_tokens.index("<image>")
+        ]
+
+    def __call__(self, examples):
+        texts = []
+        images = []
+        for example in examples:
+            image = example["image"]
+            translation = example["target"]
+            source = example["source"]
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Translate the text in the image to English."},
+                        {"type": "image"},
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": translation}
+                    ]
+                }
+            ]
+            text = processor.apply_chat_template(messages, add_generation_prompt=False)
+            texts.append(text.strip())
+            images.append([image])
+
+        batch = processor(text=texts, images=images, return_tensors="pt", padding=True)
+
+        labels = batch["input_ids"].clone()
+        labels[labels == processor.tokenizer.pad_token_id] = self.image_token_id
+        batch["labels"] = labels
+
+        return batch
+
+data_collator = MyDataCollator(processor)
+
 model.eval()
 
 from tqdm import tqdm
-EVAL_BATCH_SIZE = 16
+EVAL_BATCH_SIZE = 8
 MAX_NEW_TOKENS=128
 
 answers_unique = []
@@ -44,12 +89,12 @@ for i in tqdm(range(0, len(eval_dataset), EVAL_BATCH_SIZE)):
     examples = eval_dataset[i: i + EVAL_BATCH_SIZE]
     images = [[im] for im in examples["image"]]
     texts = []
-    for source in examples["source"]:
+    for _ in examples["source"]:
         messages = [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": f"Translate the text to English.\n###Text:\n{source}"},
+                        {"type": "text", "text": "Translate the text in the image to English."},
                         {"type": "image"},
                     ]
                 },
@@ -61,7 +106,7 @@ for i in tqdm(range(0, len(eval_dataset), EVAL_BATCH_SIZE)):
     generated_texts = processor.batch_decode(generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True)
     generated_texts_unique.extend(generated_texts)
 
-with open(f"text2_{CHECKPOINT}.txt", "w") as fp:
+with open(f"out_split{CHECKPOINT}.txt", "w") as fp:
     for t in generated_texts_unique:
         fp.write(t.strip().replace("\n", "_n") + "\n")
 
