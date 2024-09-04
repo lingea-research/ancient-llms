@@ -96,7 +96,7 @@ class MyDataCollator:
             texts.append(text.strip())
             images.append([])
 
-        batch = processor(text=texts, images=images, return_tensors="pt", padding=True)
+        batch = processor(text=texts, return_tensors="pt", padding=True)
 
         labels = batch["input_ids"].clone()
         labels[labels == processor.tokenizer.pad_token_id] = self.image_token_id
@@ -119,7 +119,7 @@ training_args = TrainingArguments(
     learning_rate=1e-4,
     weight_decay=0.01,
     logging_steps=1,
-    output_dir="./checkpoints",
+    output_dir="./model-text",
     save_strategy="steps",
     save_steps=100,
     save_total_limit=20,
