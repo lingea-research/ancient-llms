@@ -3,7 +3,7 @@ from peft import LoraConfig
 from transformers import AutoProcessor, BitsAndBytesConfig, Idefics2ForConditionalGeneration
 
 DEVICE="cuda:0"
-CHECKPOINT = 5400
+CHECKPOINT = 400
 
 processor = AutoProcessor.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
@@ -12,7 +12,7 @@ processor = AutoProcessor.from_pretrained(
 
 
 model = Idefics2ForConditionalGeneration.from_pretrained(
-        f"./model-text2/checkpoint-{CHECKPOINT}",  # 5300 was the original cp
+        f"./model-text-c1/checkpoint-{CHECKPOINT}",  # 5300 was the original cp
         torch_dtype=torch.bfloat16,
         #_attn_implementation="flash_attention_2", # Only available on A100 or H100
 ).to(DEVICE)
@@ -61,7 +61,7 @@ for i in tqdm(range(0, len(eval_dataset), EVAL_BATCH_SIZE)):
     generated_texts = processor.batch_decode(generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True)
     generated_texts_unique.extend(generated_texts)
 
-with open(f"text2_{CHECKPOINT}.txt", "w") as fp:
+with open(f"text_c1__{CHECKPOINT}.txt", "w") as fp:
     for t in generated_texts_unique:
         fp.write(t.strip().replace("\n", "_n") + "\n")
 
