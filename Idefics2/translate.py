@@ -81,12 +81,14 @@ def load_model(name_or_path, quantize=False):
 
 
 def translate_pixels(model, eval_dataset, batch_size, max_new_tokens):
+    image_generator = load_image_generator()
+
     generated_texts_unique = []
     for i in tqdm(range(0, len(eval_dataset), batch_size)):
         examples = eval_dataset[i : i + batch_size]
-        images = [[im] for im in examples["image"]]
+        images = [[render_image(image_generator, source)] for source in examples]
         texts = []
-        for _ in examples["source"]:
+        for _ in examples:
             messages = [
                 {
                     "role": "user",
@@ -118,7 +120,7 @@ def translate_text(model, eval_dataset, batch_size, max_new_tokens):
     for i in tqdm(range(0, len(eval_dataset), batch_size)):
         examples = eval_dataset[i : i + batch_size]
         texts = []
-        for source in examples["source"]:
+        for source in examples:
             messages = [
                 {
                     "role": "user",
@@ -132,9 +134,7 @@ def translate_text(model, eval_dataset, batch_size, max_new_tokens):
             ]
             text = processor.apply_chat_template(messages, add_generation_prompt=True)
             texts.append(text.strip())
-        inputs = processor(
-            text=texts, return_tensors="pt", padding=True
-        ).to(DEVICE)
+        inputs = processor(text=texts, return_tensors="pt", padding=True).to(DEVICE)
         generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens)
         generated_texts = processor.batch_decode(
             generated_ids[:, inputs["input_ids"].size(1) :], skip_special_tokens=True
