@@ -117,7 +117,6 @@ def translate_text(model, eval_dataset, batch_size, max_new_tokens):
 
     for i in tqdm(range(0, len(eval_dataset), batch_size)):
         examples = eval_dataset[i : i + batch_size]
-        images = [[im] for im in examples["image"]]
         texts = []
         for source in examples["source"]:
             messages = [
@@ -128,14 +127,13 @@ def translate_text(model, eval_dataset, batch_size, max_new_tokens):
                             "type": "text",
                             "text": f"Translate the text to English.\n###Text:\n{source}",
                         },
-                        {"type": "image"},
                     ],
                 },
             ]
             text = processor.apply_chat_template(messages, add_generation_prompt=True)
             texts.append(text.strip())
         inputs = processor(
-            text=texts, images=images, return_tensors="pt", padding=True
+            text=texts, return_tensors="pt", padding=True
         ).to(DEVICE)
         generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens)
         generated_texts = processor.batch_decode(
